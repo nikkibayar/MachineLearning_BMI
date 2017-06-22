@@ -162,11 +162,6 @@ usable_train_images, usable_train_heights, usable_train_weights = findUsableImag
 weight_classifier = train_weight_predictor(usable_train_images, usable_train_weights)
 height_classifier = train_height_predictor(usable_train_images, usable_train_heights)
 
-# img = cv2.imread('/Users/nikki-genlife/Desktop/mason.jpg')
-# makePredictionForHeight(img)
-# makePredictionForWeight(img)
-
-
 def measure_accuracy(test_data):
     height_difference = []
     weight_difference = []
@@ -181,7 +176,6 @@ def measure_accuracy(test_data):
                 pred_height = float(makePredictionForHeight(cv2.imread(image)))
                 weight_difference.append(abs(true_weight - pred_weight))
                 height_difference.append(abs(true_height - pred_height))
-        
     sum = 0
     for num in height_difference:
         sum = sum + num
