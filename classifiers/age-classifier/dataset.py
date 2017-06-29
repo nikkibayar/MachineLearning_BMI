@@ -1,10 +1,9 @@
 import os
-import json
 import cv2
 from multiprocessing import Process, JoinableQueue
 import numpy as np
 import random
-
+import utils
 
 
 class BatchCreator:
@@ -109,8 +108,8 @@ class Dataset:
     def __init__(self, root_path, img_size, batch_size, mean=None):
         self.root_path, self.img_size, self.batch_size, self.mean = root_path, img_size, batch_size, mean
 
-        self.train_data = self.load_data(os.path.join(root_path,"train"))
-        self.test_data = self.load_data(os.path.join(root_path,"test"))
+        self.train_data = utils.load_data(os.path.join(root_path,"train"))
+        self.test_data = utils.load_data(os.path.join(root_path,"test"))
 
         self.train_batch_queue = JoinableQueue(10)
         Process(target=self.batch_creator, args=(self.train_batch_queue, True,  True, True)).start()
@@ -130,23 +129,6 @@ class Dataset:
         while True:
             inputs, targets = creator.get_batch()
             queue.put((inputs, targets))
-
-    def load_data(self, path):
-        samples = []
-        for dataset in next(os.walk(path))[1]:
-            path_to_dataset  = os.path.join(path, dataset)
-            with open(os.path.join(path_to_dataset, 'groundtruth.json')) as data_file:
-                data = json.load(data_file)
-
-            for x in data:
-                id = x.pop('id')
-                x['full_path'] = os.path.join(path_to_dataset ,id)
-            samples.extend(data)
-
-            print("Read {} entries for dataset: {}".format(len(data), dataset))
-        return samples
-
-
 
     def iterate_minibatches(self, val=False):
         if val:

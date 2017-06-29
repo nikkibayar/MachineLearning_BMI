@@ -11,12 +11,17 @@ from lasagne.layers import DenseLayer
 from lasagne.layers import NonlinearityLayer
 from lasagne.layers import DropoutLayer
 from lasagne.layers import Pool2DLayer as PoolLayer
-from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
+try:
+    from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
+except:
+    # For computers with no GPUs
+    from lasagne.layers import Conv2DLayer as ConvLayer
+
 from lasagne.nonlinearities import softmax
 from lasagne.layers import set_all_param_values
 import cPickle as pickle
 
-def build_model(input_var=None):
+def build_model(input_var=None, preload_vgg=False):
     net = {}
     net['input'] = InputLayer((None, 3, 224, 224), input_var=input_var)
     net['conv1_1'] = ConvLayer(
@@ -58,10 +63,11 @@ def build_model(input_var=None):
         net['fc7_dropout'], num_units=101, nonlinearity=None)
     net['prob'] = NonlinearityLayer(net['fc8'], softmax)
 
-    # preload weights
-    with open('vgg16.pkl', 'rb') as f:
-        params = pickle.load(f)
+    if preload_vgg is True:
+        # preload vgg-166 weights
+        with open('vgg16.pkl', 'rb') as f:
+            params = pickle.load(f)
 
-    set_all_param_values(net['fc7_dropout'], params['param values'][:-2])
+        set_all_param_values(net['fc7_dropout'], params['param values'][:-2])
 
     return net

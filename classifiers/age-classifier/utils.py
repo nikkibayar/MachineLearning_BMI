@@ -5,6 +5,21 @@ import cv2
 import os
 import json
 
+def load_data(path):
+    samples = []
+    for dataset in next(os.walk(path))[1]:
+        path_to_dataset  = os.path.join(path, dataset)
+        with open(os.path.join(path_to_dataset, 'groundtruth.json')) as data_file:
+            data = json.load(data_file)
+
+        for x in data:
+            id = x.pop('id')
+            x['full_path'] = os.path.join(path_to_dataset ,id)
+        samples.extend(data)
+
+        print("Read {} entries for dataset: {}".format(len(data), dataset))
+    return samples
+
 def calc_age(photo_taken_date, matlab_date):
     birth = datetime.fromordinal(max(int(matlab_date) - 366, 1))
 
