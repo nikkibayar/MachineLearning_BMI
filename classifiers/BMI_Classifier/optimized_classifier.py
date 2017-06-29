@@ -9,8 +9,8 @@ from sklearn.svm import SVR
 import glob, random, math, itertools
 import re
 import pickle
-import traceback 
-import time 
+import traceback
+import time
 import shutil
 import json
 import jsonpickle
@@ -33,12 +33,12 @@ JAW_POINTS = list(range(0, 17))
 CHIN_POINTS = list(range(6, 11))
 
 start = time.time()
-parameters = {'C':[1,2,3,4,5,6,7,8,9,10], 'gamma': 
-              [0.01,0.02,0.03,0.04,0.05,0.10,0.2,0.3,0.4,0.5]}
+parameters = {'C':[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 'gamma':
+              [0.01, 0.02, 0.03, 0.04, 0.05, 0.10, 0.2, 0.3, 0.4, 0.5]}
 
 bmi_model = None
-bmi_classifier = SVR(C=2, gamma=.02)
-grid = GridSearchCV(bmi_classifier, parameters, n_jobs=4)
+bmi_classifier = SVR(C=5, gamma=.3)
+#grid = GridSearchCV(bmi_classifier, parameters, n_jobs=4)
 
 #Calculate BMI when given height & weight in cm and kg
 def calc_BMI(height, weight):
@@ -62,19 +62,25 @@ def get_landmarks(im):
 
 #Finds weight in a given line
 def getWeight(name):
-    i = re.search("W-[0-9]{1,3}", name)
-    weight = i.group(0)[2:]
-    return weight
+    i = re.search("W-[0-9]{1,3}.[0-9]{0,3}", name)
+    if (i != None):
+        weight = i.group(0)[2:]
+        return weight
+    else:
+        return None
 
 #Finds height in a given line
 def getHeight(name):
-    i = re.search("H-[0-9]{1,3}", name)
-    height = i.group(0)[2:]
-    return height
+    i = re.search("H-[0-9]{1,3}.[0-9]{0,3}", name)
+    if (i != None):
+        height = i.group(0)[2:]
+        return height
+    else:
+        return None
 
 #Trains predictor from images inside the training set data
 def train_bmi_predictor():
-    base_dir = '/Users/nikki-genlife/Desktop/anaconda/train_set'
+    base_dir = '/Users/nikki-genlife/Desktop/anaconda/train_mugshots'
     childrenImages = os.listdir(base_dir)
     landmarks = []
     bmi = []
@@ -82,16 +88,17 @@ def train_bmi_predictor():
         pathNameToImage = base_dir + '/' + childrenImages[image]
         features = get_landmarks(cv2.imread(pathNameToImage))
         if(type(features) != str):
-            height = int(getHeight(childrenImages[image]))
-            weight = int(getWeight(childrenImages[image]))
-            bmi.append(calc_BMI(height, weight))
-            landmarks.append(features.flatten())
+            height = getHeight(childrenImages[image])
+            weight = getWeight(childrenImages[image])
+            if(height != None and weight != None):
+                bmi.append(calc_BMI(float(height), float(weight)))
+                landmarks.append(features.flatten())
     try:
         landmarks = numpy.array(landmarks)
-        print("number of training images was;")
+        print("number of training images was:")
         print(len(landmarks))
-        grid.fit(landmarks, bmi)
-        print(grid.best_params_)
+        #grid.fit(landmarks, bmi)
+        #print(grid.best_params_)
         return bmi_classifier.fit(landmarks, bmi)
     except Exception as ex:
         print(ex)
@@ -126,20 +133,21 @@ def measure_accuracy():
     print("in method")
     bmi_difference = []
     all_pred_bmi = []
-    base_dir = '/Users/nikki-genlife/Desktop/anaconda/test_set'
+    base_dir = '/Users/nikki-genlife/Desktop/anaconda/test_mugshots'
     childrenImages = os.listdir(base_dir)
     landmarks = []
     count = 0
     for image in range(0, len(childrenImages)):
         pathNameToImage = base_dir + '/' + childrenImages[image]
-        true_weight = int(getWeight(childrenImages[image]))
-        true_height = int(getHeight(childrenImages[image]))
-        true_bmi = calc_BMI(true_height, true_weight)
-        pred_bmi = makePredictionForBMI(cv2.imread(pathNameToImage))
-        if(type(pred_bmi) != str):
-            count = count + 1
-            all_pred_bmi.append(pred_bmi)
-            bmi_difference.append(abs(true_bmi - pred_bmi))
+        true_weight = getWeight(childrenImages[image])
+        true_height = getHeight(childrenImages[image])
+        if(true_height != None and true_weight != None):
+            true_bmi = calc_BMI(float(true_height), float(true_weight))
+            pred_bmi = makePredictionForBMI(cv2.imread(pathNameToImage))
+            if(type(pred_bmi) != str):
+                count = count + 1
+                all_pred_bmi.append(pred_bmi)
+                bmi_difference.append(abs(true_bmi - pred_bmi))
     print("number of testing images was:")
     print(count)
     sum = 0
@@ -155,15 +163,11 @@ def measure_accuracy():
     end = time.time()
     print(end-start)
 
-#measure_accuracy()
+measure_accuracy()
 
 
-#SAVING METHODS FOR LATER
-
-#test_set, train_set = split_data()
-
+#SAVING METHODS FOR LATER: USED FOR SPLITTING DATABASE INTO TESTING AND TRAINING SETS   
 # def send_to_folder(folder, folder_name):
-
 #     for image in range(0, len(folder)):
 #         print(folder[image])
 #         old_path = folder[image]['path'] 
@@ -175,7 +179,7 @@ def measure_accuracy():
 # #Usable Images
 # def split_data():
 #     all_images = []
-#     base_dir = '/Users/nikki-genlife/Desktop/anaconda/all_images'
+#     base_dir = '/Users/nikki-genlife/Desktop/anaconda/mugshots'
 #     childrenImages = os.listdir(base_dir)
 #     chilrenNames = []
 #     for image in range(1, len(childrenImages)):
@@ -184,38 +188,13 @@ def measure_accuracy():
 #         data = {'path': pathNameToImage, 'name': childrenImages[image]}
 #         all_images.append(data)
 #     random.shuffle(all_images)
-#     test = all_images[:895]
-#     train = all_images[895:]
+#     test = all_images[:471]
+#     train = all_images[471:]
 #     print("here")
-#     #send_to_folder(train, 'train_set')
+#     send_to_folder(train, 'train_mugshots')
+#     send_to_folder(test, 'test_mugshots')
 #     return test, train
-#Finds usable images from testing directory
-# def findUsableTestImages():
-#     base_dir = '/Users/nikki-genlife/Desktop/anaconda/test_set'
-#     childrenImages = os.listdir(base_dir)
-#     bmi = []
-#     for image in range(1, len(childrenImages)):
-#         pathNameToImage = base_dir + '/' + childrenImages[image]
-#         if (type(get_landmarks(cv2.imread(pathNameToImage))) != str):
-#             height = int(getHeight(childrenImages[image]))
-#             weight = int(getWeight(childrenImages[image]))
-#             bmi.append(calc_BMI(height, weight))
-#         else:
-#             pass
-
-# #Finds usable images from training directory
-# def findUsableTrainImages():
-#     base_dir = '/Users/nikki-genlife/Desktop/anaconda/train_set'
-#     childrenImages = os.listdir(base_dir)
-#     bmi = []
-#     for image in range(1, len(childrenImages)):
-#         pathNameToImage = base_dir + '/' + childrenImages[image]
-#         if (type(get_landmarks(cv2.imread(pathNameToImage))) != str):
-#             height = int(getHeight(childrenImages[image]))
-#             weight = int(getWeight(childrenImages[image]))
-#             bmi.append(calc_BMI(height, weight))
-#         else:
-#             pass
+# test_set, train_set = split_data()
 
 
 
