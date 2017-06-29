@@ -136,6 +136,7 @@ def measure_accuracy():
     base_dir = '/Users/nikki-genlife/Desktop/anaconda/test_mugshots'
     childrenImages = os.listdir(base_dir)
     landmarks = []
+    all_data = []
     count = 0
     for image in range(0, len(childrenImages)):
         pathNameToImage = base_dir + '/' + childrenImages[image]
@@ -146,8 +147,21 @@ def measure_accuracy():
             pred_bmi = makePredictionForBMI(cv2.imread(pathNameToImage))
             if(type(pred_bmi) != str):
                 count = count + 1
+                data = {"image": childrenImages[image], "prediction difference": abs(true_bmi - pred_bmi)}
+                all_data.append(data)
                 all_pred_bmi.append(pred_bmi)
                 bmi_difference.append(abs(true_bmi - pred_bmi))
+   # good_prediction = []
+    # bad_prediction = []
+    # for x in range(0, len(all_data)):
+    #     if (float(all_data[x]['prediction difference']) > 4):
+    #         bad_prediction.append(base_dir + '/' + all_data[x]['image'])
+    #     else:
+    #         good_prediction.append(base_dir + '/' + all_data[x]['image'])
+
+    # send_to_folder(bad_prediction, "bad_predictions")
+    # send_to_folder(good_prediction, "good_predictions")
+            
     print("number of testing images was:")
     print(count)
     sum = 0
@@ -167,15 +181,13 @@ measure_accuracy()
 
 
 #SAVING METHODS FOR LATER: USED FOR SPLITTING DATABASE INTO TESTING AND TRAINING SETS   
-# def send_to_folder(folder, folder_name):
-#     for image in range(0, len(folder)):
-#         print(folder[image])
-#         old_path = folder[image]['path'] 
-#         print(old_path)
-#         new_path = '/Users/nikki-genlife/Desktop/anaconda/' + str(folder_name) + '/' + folder[image]['name']
-#         print(new_path)
-#         os.rename(old_path, new_path)
 
+# def send_to_folder(folder, folder_name):
+#     print(len(folder))
+#     for image in range(0, len(folder)):
+#         print("here")
+#         new_path = '/Users/nikki-genlife/Desktop/anaconda/test_mugshots/' + folder_name + "/" + folder[image][52:]
+#         os.rename(folder[image], new_path)
 # #Usable Images
 # def split_data():
 #     all_images = []
