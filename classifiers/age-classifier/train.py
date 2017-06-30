@@ -8,16 +8,35 @@ import lasagne
 import cnn
 import random
 from dataset import Dataset
-from lasagne.layers import NonlinearityLayer
-from lasagne.nonlinearities import softmax
+import os
 
 num_classes = 101
-batch_size = 16
 top_k = 5
+MODE = "PRETRAINED_VGG16" # either "PRETRAINED_VGG16" or "WIDERESNETS"
 
-def build_vgg16(input_var=None):
-    network = cnn.build_model(input_var)['fc8']
-    network = NonlinearityLayer(network, softmax)
+DEFS={ 'PRETRAINED_VGG16' : {
+                                'source_size': 256,
+                                'crop_size': 224,
+                                'mean': np.array([103.939, 116.779, 123.68]) ,
+                                'batch_size': 16,
+                                'snapshot': 'snapshot.npz'
+                            },
+        'WIDERESNETS' :     {
+                                'source_size': 75,
+                                'crop_size': 64,
+                                'mean': np.array([83.8461, 95.9349, 117.756]),
+                                'batch_size': 16,
+                                'snapshot': None
+                            }
+               }
+def build_network(input_var=None):
+    if MODE == "PRETRAINED_VGG16":
+        network = cnn.build_vgg16(input_var)['prob']
+        print("(sanity check) Trainable layers before: {}".format(len(lasagne.layers.get_all_params(network, trainable="True"))) )
+        network = freeze_early_weights(network)
+        print("(sanity check) Trainable layers after: {}".format(len(lasagne.layers.get_all_params(network, trainable="True"))) )
+    else:
+        network = cnn.build_WideResNet(input_var, 16, 8)
 
     network = lasagne.layers.DimshuffleLayer(network, (1, 0))
     network = lasagne.layers.FlattenLayer(network)
@@ -25,14 +44,14 @@ def build_vgg16(input_var=None):
     return network
 
 def build_targets_formatter(input_var=None):
-    network = lasagne.layers.InputLayer(shape=(batch_size, num_classes), input_var=input_var)
+    network = lasagne.layers.InputLayer(shape=(DEFS[MODE]['batch_size'], num_classes), input_var=input_var)
     network = lasagne.layers.FlattenLayer(network, outdim=1)
 
     return network
 
 def freeze_early_weights(network):
     layers = lasagne.layers.get_all_layers(network)
-    for i in range(len(layers)-6):
+    for i in range(len(layers)-4):
         layer = layers[i]
         params = layer.get_params()
         if len(params) > 0:
@@ -40,12 +59,44 @@ def freeze_early_weights(network):
             layer.params[layer.b].remove("trainable")
     return network
 
+def save_weights(network, file_name, updates=None):
+    np.savez(file_name, lasagne.layers.get_all_param_values(network))
+    if updates is not None:
+        f,_ = os.path.splitext(file_name)
+        np.savez(f + "_updates.npz", [p.get_value() for p in updates.keys()] )
+
+def load_weights(network, file_name, updates):
+    if os.path.exists(file_name):
+        print("Loading previously saved weights from {}".format(file_name))
+        base_data = np.load(file_name)
+        base_data = base_data[base_data.keys()[0]]
+        lasagne.layers.set_all_param_values(network, base_data)
+    else:
+        print("Couldn't find {} on disk. Learning from scratch".format(file_name))
+        return
+    # Read and load updates file if it exists
+    f,_ = os.path.splitext(file_name)
+    updates_file = f + "_updates.npz"
+    if os.path.exists(updates_file):
+        print("Using optimization data from file {}".format(updates_file))
+        base_data_optimization = np.load(updates_file)
+        base_data_optimization = base_data_optimization[base_data_optimization.keys()[0]]
+        for p, value in zip(updates.keys(), base_data_optimization):
+            p.set_value(value)
+    else:
+        print("Not using optimization. No {} file found".format(updates_file))
+
+
 def main(num_epochs=500):
     # Loading dataset
     print "Loading dataset"
-    random.seed(123) 
-    mean = np.array([103.939, 116.779, 123.68])
-    dataset = Dataset("data", 224,  batch_size, mean)
+    random.seed(123)
+
+    dataset = Dataset("data",
+                      DEFS[MODE]['source_size'],
+                      DEFS[MODE]['crop_size'],
+                      DEFS[MODE]['batch_size'],
+                      DEFS[MODE]['mean'])
     
     # Prepare Theano variables for inputs and targets
     input_var = T.tensor4('inputs')
@@ -53,17 +104,8 @@ def main(num_epochs=500):
 
     # Build CNN model
     print("Building model and compiling functions...")
-    network = build_vgg16(input_var)
+    network = build_network(input_var)
 
-    # # Load the weights obtained earlier
-    # base_data = np.load('snapshot.npz')
-    # base_data = base_data[base_data.keys()[0]]
-    # lasagne.layers.set_all_param_values(network, base_data)
-
-
-    print("(sanity check) Trainable layers before: {}".format(len(lasagne.layers.get_all_params(network, trainable="True"))) )
-    network = freeze_early_weights(network)
-    print("(sanity check) Trainable layers after: {}".format(len(lasagne.layers.get_all_params(network, trainable="True"))) )
     target_formatter = build_targets_formatter(target_var)
 
     # Expressions for training losses
@@ -74,7 +116,7 @@ def main(num_epochs=500):
 
     # Update expressions for training (Stochastic Gradient Descent with Nesterov momentum)
     params = lasagne.layers.get_all_params(network, trainable=True)
-    updates = lasagne.updates.nesterov_momentum(train_loss, params, learning_rate=1e-5, momentum=0.9)
+    updates = lasagne.updates.nesterov_momentum(train_loss, params, learning_rate=1e-2, momentum=0.9)
 
     # Expressions for validation loss + accuracy (topk)
     test_prediction = lasagne.layers.get_output(network, deterministic=True)
@@ -89,8 +131,9 @@ def main(num_epochs=500):
     # Function to compute the validation loss and accuracy:
     val_fn = theano.function([input_var, target_var], [test_loss, test_acc], allow_input_downcast=True)
 
-
-
+    # Load the weights obtained earlier
+    if DEFS[MODE]['snapshot'] is not None:
+        load_weights(network, DEFS[MODE]['snapshot'], updates)
 
     best_val = 100.0
     # Launch the training loop:
@@ -104,7 +147,6 @@ def main(num_epochs=500):
         for batch in dataset.iterate_minibatches():
             inputs, targets = batch
             train_err+= train_fn(inputs, targets)
-
             train_batches += 1
 
         # And a full pass over the validation data:
@@ -126,11 +168,11 @@ def main(num_epochs=500):
         
         if ((val_err / val_batches) < best_val) :
             best_val = val_err / val_batches
-            # save network            
-            np.savez('model_' + str(epoch + 1) + '.npz', lasagne.layers.get_all_param_values(network))
-        np.savez('snapshot.npz', lasagne.layers.get_all_param_values(network))
+            # save network
+            save_weights(network, 'model' + str(epoch + 1) + '.npz')
+        save_weights(network, 'snapshot.npz', updates)
         if epoch % 10 == 0:
-            np.savez('snapshot_' + str(epoch + 1) + '.npz', lasagne.layers.get_all_param_values(network))
+            save_weights(network, 'snapshot_' + str(epoch + 1) + '.npz')
     
         print("lowest val %08f"%(best_val))
 
