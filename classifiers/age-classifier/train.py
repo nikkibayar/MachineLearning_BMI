@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import time
+import datetime
 import numpy as np
 import theano
 import theano.tensor as T
@@ -86,10 +87,34 @@ def load_weights(network, file_name, updates):
     else:
         print("Not using optimization. No {} file found".format(updates_file))
 
+def save_epoch_losses(losses_per_batch_training, losses_per_batch_testing, training_loss, validation_loss, validation_accuracy, log_file):
+    with open(log_file, "a") as myfile:
+        for loss in losses_per_batch_training:
+            myfile.write("training_batch_loss " + str(loss) + '\n')
+        for loss in losses_per_batch_testing:
+            myfile.write("testing_batch_loss " + str(loss) + '\n')
+
+        myfile.write("training_loss " + str(training_loss) + '\n')
+        myfile.write("validation_loss " + str(validation_loss) + '\n')
+        myfile.write("validation_accuracy " + str(validation_accuracy) + '\n')
+        myfile.write("-" + '\n')
+
+
+def get_log_file():
+    now = datetime.datetime.now()
+    file_name = os.path.join( "logs" ,
+                              "{}-{}-{}-{}-{}-{}.txt".format( now.year, now.month, now.day, now.hour, now.minute, now.second))
+
+    if os.path.exists("logs") is False:
+        os.makedirs("logs")
+    return file_name
+
 
 def main(num_epochs=500):
     # Loading dataset
     print "Loading dataset"
+    log_file = get_log_file()
+    print("Saving logs in {}".format( log_file ))
     random.seed(123)
 
     dataset = Dataset("data",
@@ -144,27 +169,42 @@ def main(num_epochs=500):
         train_batches = 0
         start_time = time.time()
 
+        losses_per_batch_training = []
         for batch in dataset.iterate_minibatches():
             inputs, targets = batch
             train_err+= train_fn(inputs, targets)
             train_batches += 1
+            losses_per_batch_training.append(train_err)
+
 
         # And a full pass over the validation data:
         val_err = 0
         val_batches = 0
         val_acc = 0
+        losses_per_batch_testing = []
         for batch in dataset.iterate_minibatches(True):
             inputs, targets = batch
             err, acc = val_fn(inputs, targets)
+            losses_per_batch_testing.append(err)
             val_err += err
             val_acc += acc
             val_batches += 1
 
+        training_loss = train_err / train_batches
+        validation_loss = val_err / val_batches
+        validation_accuracy = val_acc / val_batches * 100
+
+        save_epoch_losses(losses_per_batch_training,
+                          losses_per_batch_testing,
+                          training_loss,
+                          validation_loss,
+                          validation_accuracy,
+                          log_file)
         # Then we print the results for this epoch:
         print("Epoch {} of {} took {:.3f}s".format(epoch + 1, num_epochs, time.time() - start_time))
-        print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
-        print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
-        print("  validation accuracy:\t\t{:.4f} %".format(val_acc / val_batches * 100))
+        print("  training loss:\t\t{:.6f}".format(training_loss))
+        print("  validation loss:\t\t{:.6f}".format(validation_loss))
+        print("  validation accuracy:\t\t{:.4f} %".format(validation_accuracy))
         
         if ((val_err / val_batches) < best_val) :
             best_val = val_err / val_batches
